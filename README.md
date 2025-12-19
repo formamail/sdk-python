@@ -17,9 +17,8 @@ client = Formamail(api_key="your_api_key")
 
 # Send an email
 result = client.emails.send(
-    template_id="tmpl_welcome",
+    template_id="welcome-email",  # Can be UUID, shortId (etpl_xxx), or slug
     to="customer@example.com",
-    to_name="John Doe",
     variables={
         "firstName": "John",
         "accountId": "12345",
@@ -41,30 +40,72 @@ print(f"Email sent: {result['id']}")
 
 ## Usage Examples
 
-### Send Email with PDF Attachment
+### Multiple Recipients with CC/BCC
+
+The `to`, `cc`, and `bcc` parameters accept flexible input formats:
 
 ```python
-result = client.emails.send_with_pdf(
-    template_id="tmpl_invoice_email",
-    to="customer@example.com",
-    pdf_template_id="tmpl_invoice_pdf",
-    pdf_file_name="Invoice-001",
-    variables={
-        "invoiceNumber": "INV-001",
-        "customerName": "John Doe",
-        "total": 99.99,
-    },
+# Simple string (single recipient)
+client.emails.send(
+    template_id="welcome-email",
+    to="john@example.com",
+    variables={"name": "John"},
+)
+
+# Dict with name
+client.emails.send(
+    template_id="welcome-email",
+    to={"email": "john@example.com", "name": "John Doe"},
+    variables={"name": "John"},
+)
+
+# List of recipients (mixed formats)
+client.emails.send(
+    template_id="team-update",
+    to=[
+        {"email": "john@example.com", "name": "John Doe"},
+        "jane@example.com",  # Name is optional
+        {"email": "bob@example.com", "name": "Bob Smith"},
+    ],
+    variables={"teamName": "Engineering"},
+)
+
+# With CC and BCC
+client.emails.send(
+    template_id="invoice-email",
+    to={"email": "customer@example.com", "name": "Customer"},
+    cc="accounts@customer.com",  # CC the customer's accounts team
+    bcc=[
+        "audit@yourcompany.com",  # Internal audit copy
+        {"email": "manager@yourcompany.com", "name": "Sales Manager"},
+    ],
+    variables={"invoiceNumber": "INV-001"},
 )
 ```
 
-### Send Email with Excel Attachment
+### Send Email with Attachment (PDF or Excel)
 
 ```python
-result = client.emails.send_with_excel(
-    template_id="tmpl_report_email",
+# Send with PDF attachment
+result = client.emails.send_with_attachment(
+    template_id="invoice-email",
+    to="customer@example.com",
+    attachment_template_id="invoice-pdf",
+    attachment_type="pdf",
+    file_name="Invoice-001",
+    variables={
+        "invoiceNumber": "INV-001",
+        "customerName": "John Doe",
+    },
+)
+
+# Send with Excel attachment
+result = client.emails.send_with_attachment(
+    template_id="report-email",
     to="manager@example.com",
-    excel_template_id="tmpl_monthly_report",
-    excel_file_name="Monthly-Report-Jan",
+    attachment_template_id="monthly-report-excel",
+    attachment_type="excel",
+    file_name="Monthly-Report-Jan",
     variables={
         "reportMonth": "January 2025",
     },
@@ -74,18 +115,76 @@ result = client.emails.send_with_excel(
 ### Send Bulk Emails
 
 ```python
+# Simple bulk send
 result = client.emails.send_bulk(
-    template_id="tmpl_newsletter",
+    template_id="newsletter",
     recipients=[
-        {"email": "user1@example.com", "name": "User 1", "variables": {"firstName": "User"}},
-        {"email": "user2@example.com", "name": "User 2", "variables": {"firstName": "User"}},
+        {"email": "user1@example.com", "name": "User 1", "variables": {"firstName": "Alice"}},
+        {"email": "user2@example.com", "name": "User 2", "variables": {"firstName": "Bob"}},
     ],
-    common_variables={
-        "companyName": "Acme Corp",
-    },
+    base_variables={"companyName": "Acme Corp"},  # Shared across all
+    tags=["newsletter", "monthly"],
 )
 
 print(f"Batch ID: {result['batchId']}")
+```
+
+### Bulk Send with Personalized Attachments
+
+There are two ways to personalize attachments in bulk sends:
+
+**Option 1: Using `recipientVariableFields`** - Specify which recipient variable fields to use for attachments
+
+```python
+invoice_result = client.emails.send_bulk(
+    template_id="invoice-email",
+    recipients=[
+        {"email": "c1@example.com", "variables": {"name": "Alice", "invoiceNumber": "INV-001", "amount": 100}},
+        {"email": "c2@example.com", "variables": {"name": "Bob", "invoiceNumber": "INV-002", "amount": 200}},
+    ],
+    base_variables={"companyName": "Acme Corp"},
+    attachments=[{
+        "filename": "invoice-{{invoiceNumber}}.pdf",
+        "attachmentTemplateId": "invoice-pdf",
+        "baseVariables": {"currency": "USD"},
+        # These fields are pulled from each recipient's variables
+        "recipientVariableFields": ["name", "invoiceNumber", "amount"],
+        "outputFormats": ["pdf"],
+    }],
+    batch_name="January Invoices",
+)
+```
+
+**Option 2: Using `attachmentOverrides`** - Override attachments per recipient for complete control
+
+```python
+custom_result = client.emails.send_bulk(
+    template_id="report-email",
+    recipients=[
+        {
+            "email": "c1@example.com",
+            "variables": {"name": "Alice"},
+            # Completely override attachments for this recipient
+            "attachmentOverrides": [{
+                "filename": "custom-report-alice.pdf",
+                "attachmentTemplateId": "vip-report-pdf",
+                "baseVariables": {"reportType": "VIP", "discount": 20},
+                "outputFormats": ["pdf"],
+            }],
+        },
+        {
+            "email": "c2@example.com",
+            "variables": {"name": "Bob"},
+            # This recipient uses the default attachments (no override)
+        },
+    ],
+    base_variables={"companyName": "Acme Corp"},
+    attachments=[{
+        "filename": "standard-report.pdf",
+        "attachmentTemplateId": "standard-report-pdf",
+        "outputFormats": ["pdf"],
+    }],
+)
 ```
 
 ### List and Search Emails
@@ -245,8 +344,7 @@ with Formamail(api_key="your_api_key") as client:
 ### Emails Resource
 
 - `client.emails.send(...)` - Send an email
-- `client.emails.send_with_pdf(...)` - Send with PDF attachment
-- `client.emails.send_with_excel(...)` - Send with Excel attachment
+- `client.emails.send_with_attachment(...)` - Send with PDF or Excel attachment
 - `client.emails.send_bulk(...)` - Send bulk emails
 - `client.emails.get(email_id)` - Get email by ID
 - `client.emails.list(...)` - List/search emails

@@ -2,9 +2,40 @@
 Emails Resource
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from ..http import HttpClient, AsyncHttpClient
+
+
+# Type alias for flexible recipient input
+RecipientInput = Union[str, Dict[str, Any], List[Union[str, Dict[str, Any]]]]
+
+
+def _normalize_recipients(
+    recipients: RecipientInput,
+) -> List[Dict[str, Any]]:
+    """
+    Normalize recipient input to list of {email, name} dicts.
+
+    Accepts:
+        - str: "john@example.com"
+        - dict: {"email": "john@example.com", "name": "John"}
+        - list: ["john@example.com", {"email": "jane@example.com", "name": "Jane"}]
+    """
+    if isinstance(recipients, str):
+        return [{"email": recipients}]
+    elif isinstance(recipients, dict):
+        return [recipients]
+    elif isinstance(recipients, list):
+        result = []
+        for r in recipients:
+            if isinstance(r, str):
+                result.append({"email": r})
+            else:
+                result.append(r)
+        return result
+    else:
+        raise ValueError(f"Invalid recipient type: {type(recipients)}")
 
 
 class EmailsResource:
@@ -16,140 +47,156 @@ class EmailsResource:
     def send(
         self,
         template_id: str,
-        to: str,
+        to: RecipientInput,
         *,
-        to_name: Optional[str] = None,
-        subject: Optional[str] = None,
+        cc: Optional[RecipientInput] = None,
+        bcc: Optional[RecipientInput] = None,
+        version: Optional[str] = None,
+        sender_email: Optional[str] = None,
+        sender_id: Optional[str] = None,
         from_name: Optional[str] = None,
         reply_to: Optional[str] = None,
         variables: Optional[Dict[str, Any]] = None,
-        track_opens: bool = True,
-        track_clicks: bool = True,
+        priority: Optional[str] = None,
+        scheduled_at: Optional[str] = None,
+        headers: Optional[Dict[str, str]] = None,
+        tags: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
         attachments: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
         Send an email using a template.
 
         Args:
-            template_id: Template ID to use
-            to: Recipient email address
-            to_name: Recipient name (optional)
-            subject: Subject line (overrides template)
-            from_name: Sender name (optional)
-            reply_to: Reply-to email (optional)
+            template_id: Template ID (UUID, shortId like etpl_xxx, or slug)
+            to: Recipient(s) - string, dict with email/name, or list
+            cc: CC recipient(s) - same format as 'to'
+            bcc: BCC recipient(s) - same format as 'to'
+            version: Template version ('published' or 'draft')
+            sender_email: Verified sender email address
+            sender_id: Sender ID (legacy - prefer sender_email)
+            from_name: Custom sender name
+            reply_to: Reply-to email override
             variables: Template variables
-            track_opens: Track email opens
-            track_clicks: Track link clicks
+            priority: Email priority ('low', 'normal', 'high')
+            scheduled_at: Schedule send time (ISO 8601)
+            headers: Custom headers
+            tags: Tags for tracking
+            metadata: Metadata for tracking
             attachments: List of attachments
 
         Returns:
             Send result with email ID
 
         Example:
+            >>> # Single recipient
             >>> result = client.emails.send(
-            ...     template_id="tmpl_welcome",
+            ...     template_id="welcome-email",
             ...     to="customer@example.com",
             ...     variables={"firstName": "John"}
+            ... )
+
+            >>> # Multiple recipients with cc/bcc
+            >>> result = client.emails.send(
+            ...     template_id="invoice-email",
+            ...     to=[
+            ...         {"email": "john@example.com", "name": "John Doe"},
+            ...         "jane@example.com",
+            ...     ],
+            ...     cc="manager@example.com",
+            ...     bcc=["audit@example.com"],
+            ...     variables={"invoiceNumber": "INV-001"}
             ... )
         """
         body: Dict[str, Any] = {
             "templateId": template_id,
-            "to": to,
-            "trackOpens": track_opens,
-            "trackClicks": track_clicks,
+            "to": _normalize_recipients(to),
         }
 
-        if to_name:
-            body["toName"] = to_name
-        if subject:
-            body["subject"] = subject
+        if cc is not None:
+            body["cc"] = _normalize_recipients(cc)
+        if bcc is not None:
+            body["bcc"] = _normalize_recipients(bcc)
+        if version:
+            body["version"] = version
+        if sender_email:
+            body["senderEmail"] = sender_email
+        if sender_id:
+            body["senderId"] = sender_id
         if from_name:
             body["fromName"] = from_name
         if reply_to:
             body["replyTo"] = reply_to
         if variables:
             body["variables"] = variables
+        if priority:
+            body["priority"] = priority
+        if scheduled_at:
+            body["scheduledAt"] = scheduled_at
+        if headers:
+            body["headers"] = headers
+        if tags:
+            body["tags"] = tags
+        if metadata:
+            body["metadata"] = metadata
         if attachments:
             body["attachments"] = attachments
 
         response = self._http.post("/api/v1/emails/send", body)
         return response.get("data", response)
 
-    def send_with_pdf(
+    def send_with_attachment(
         self,
         template_id: str,
-        to: str,
-        pdf_template_id: str,
+        to: RecipientInput,
+        attachment_template_id: str,
+        attachment_type: str = "pdf",
         *,
-        pdf_file_name: Optional[str] = None,
-        pdf_variables: Optional[Dict[str, Any]] = None,
+        file_name: Optional[str] = None,
+        attachment_variables: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """
-        Send an email with a generated PDF attachment.
+        Send an email with a generated attachment (PDF or Excel).
 
         Args:
             template_id: Email template ID
-            to: Recipient email
-            pdf_template_id: PDF template ID
-            pdf_file_name: Custom PDF file name
-            pdf_variables: Variables for PDF template
-            **kwargs: Other send options
+            to: Recipient(s) - string, dict, or list
+            attachment_template_id: Template ID for generating the attachment
+            attachment_type: Attachment type ('pdf' or 'excel')
+            file_name: Custom file name (without extension)
+            attachment_variables: Variables for the attachment template
+            **kwargs: Other send options (cc, bcc, variables, etc.)
 
         Example:
-            >>> result = client.emails.send_with_pdf(
-            ...     template_id="tmpl_invoice_email",
+            >>> # Send with PDF attachment
+            >>> result = client.emails.send_with_attachment(
+            ...     template_id="invoice-email",
             ...     to="customer@example.com",
-            ...     pdf_template_id="tmpl_invoice_pdf",
-            ...     pdf_file_name="Invoice-001",
+            ...     attachment_template_id="invoice-pdf",
+            ...     attachment_type="pdf",
+            ...     file_name="Invoice-001",
             ...     variables={"invoiceNumber": "INV-001"}
+            ... )
+
+            >>> # Send with Excel attachment
+            >>> result = client.emails.send_with_attachment(
+            ...     template_id="report-email",
+            ...     to="manager@example.com",
+            ...     attachment_template_id="monthly-report-excel",
+            ...     attachment_type="excel",
+            ...     file_name="Report-Jan",
+            ...     variables={"reportMonth": "January 2025"}
             ... )
         """
         attachment: Dict[str, Any] = {
-            "type": "pdf",
-            "templateId": pdf_template_id,
+            "type": attachment_type,
+            "templateId": attachment_template_id,
         }
-        if pdf_file_name:
-            attachment["fileName"] = pdf_file_name
-        if pdf_variables:
-            attachment["variables"] = pdf_variables
-
-        return self.send(
-            template_id=template_id,
-            to=to,
-            attachments=[attachment],
-            **kwargs,
-        )
-
-    def send_with_excel(
-        self,
-        template_id: str,
-        to: str,
-        excel_template_id: str,
-        *,
-        excel_file_name: Optional[str] = None,
-        excel_variables: Optional[Dict[str, Any]] = None,
-        **kwargs: Any,
-    ) -> Dict[str, Any]:
-        """
-        Send an email with a generated Excel attachment.
-
-        Args:
-            template_id: Email template ID
-            to: Recipient email
-            excel_template_id: Excel template ID
-            excel_file_name: Custom Excel file name
-            excel_variables: Variables for Excel template
-            **kwargs: Other send options
-        """
-        attachment: Dict[str, Any] = {
-            "type": "excel",
-            "templateId": excel_template_id,
-        }
-        if excel_file_name:
-            attachment["fileName"] = excel_file_name
-        if excel_variables:
-            attachment["variables"] = excel_variables
+        if file_name:
+            attachment["fileName"] = file_name
+        if attachment_variables:
+            attachment["variables"] = attachment_variables
 
         return self.send(
             template_id=template_id,
@@ -163,53 +210,137 @@ class EmailsResource:
         template_id: str,
         recipients: List[Dict[str, Any]],
         *,
-        subject: Optional[str] = None,
+        version: Optional[str] = None,
+        base_variables: Optional[Dict[str, Any]] = None,
+        attachments: Optional[List[Dict[str, Any]]] = None,
+        sender_email: Optional[str] = None,
+        sender_id: Optional[str] = None,
         from_name: Optional[str] = None,
         reply_to: Optional[str] = None,
-        common_variables: Optional[Dict[str, Any]] = None,
-        track_opens: bool = True,
-        track_clicks: bool = True,
+        priority: Optional[str] = None,
+        headers: Optional[Dict[str, str]] = None,
+        tags: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        batch_name: Optional[str] = None,
+        dry_run: Optional[bool] = None,
+        scheduled_at: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Send bulk emails to multiple recipients.
+        Send bulk emails to multiple recipients with personalization.
+
+        Supports variable overrides at multiple levels:
+        - base_variables: Shared across all recipients
+        - recipients[].variables: Per-recipient overrides (merged with base_variables)
+        - attachments[].base_variables: Shared for attachment generation
+        - recipients[].attachment_overrides: Per-recipient attachment overrides
 
         Args:
-            template_id: Template ID
-            recipients: List of recipients with email, name, variables
-            subject: Subject line
-            from_name: Sender name
-            reply_to: Reply-to email
-            common_variables: Variables for all recipients
-            track_opens: Track email opens
-            track_clicks: Track link clicks
+            template_id: Template ID (UUID, shortId like etpl_xxx, or slug)
+            recipients: List of recipients (max 1000) with:
+                - email: Recipient email address
+                - name: Recipient name (optional)
+                - variables: Variables for this recipient (merged with base_variables)
+                - attachment_overrides: Per-recipient attachment overrides (optional)
+            version: Template version ('published' or 'draft')
+            base_variables: Variables shared across all recipients
+            attachments: Attachments for all recipients with:
+                - filename: Can use variables like {{invoiceNumber}}.pdf
+                - attachment_template_id: Template for generating attachment
+                - base_variables: Shared variables for attachment
+                - recipient_variable_fields: Which recipient fields to use
+                - output_formats: ['pdf', 'excel']
+            sender_email: Verified sender email address
+            sender_id: Sender ID (legacy - prefer sender_email)
+            from_name: Custom sender name
+            reply_to: Reply-to email address
+            priority: Email priority ('low', 'normal', 'high')
+            headers: Custom headers
+            tags: Tags for tracking
+            metadata: Metadata for tracking
+            batch_name: Batch name for tracking
+            dry_run: Validate without sending (returns validation result)
+            scheduled_at: Schedule send time (ISO 8601 format)
 
         Example:
+            >>> # Simple bulk send
             >>> result = client.emails.send_bulk(
-            ...     template_id="tmpl_newsletter",
+            ...     template_id="newsletter",
             ...     recipients=[
-            ...         {"email": "user1@example.com", "name": "User 1"},
-            ...         {"email": "user2@example.com", "name": "User 2"},
+            ...         {"email": "user1@example.com", "variables": {"firstName": "Alice"}},
+            ...         {"email": "user2@example.com", "variables": {"firstName": "Bob"}},
             ...     ],
-            ...     common_variables={"companyName": "Acme"}
+            ...     base_variables={"companyName": "Acme", "year": "2025"},
+            ...     tags=["newsletter", "monthly"],
+            ... )
+
+            >>> # Option 1: Personalized attachments using recipientVariableFields
+            >>> result = client.emails.send_bulk(
+            ...     template_id="invoice-email",
+            ...     recipients=[
+            ...         {"email": "c1@example.com", "variables": {"name": "Alice", "invoiceNumber": "INV-001"}},
+            ...         {"email": "c2@example.com", "variables": {"name": "Bob", "invoiceNumber": "INV-002"}},
+            ...     ],
+            ...     attachments=[{
+            ...         "filename": "invoice-{{invoiceNumber}}.pdf",
+            ...         "attachmentTemplateId": "invoice-pdf",
+            ...         "recipientVariableFields": ["name", "invoiceNumber"],  # Pull these from recipient
+            ...         "outputFormats": ["pdf"],
+            ...     }],
+            ... )
+
+            >>> # Option 2: Per-recipient attachment override using attachmentOverrides
+            >>> result = client.emails.send_bulk(
+            ...     template_id="report-email",
+            ...     recipients=[
+            ...         {
+            ...             "email": "vip@example.com",
+            ...             "variables": {"name": "VIP Customer"},
+            ...             "attachmentOverrides": [{  # Override for this recipient
+            ...                 "filename": "vip-report.pdf",
+            ...                 "attachmentTemplateId": "vip-report-pdf",
+            ...                 "outputFormats": ["pdf"],
+            ...             }],
+            ...         },
+            ...         {"email": "regular@example.com", "variables": {"name": "Regular"}},  # Uses default
+            ...     ],
+            ...     attachments=[{"filename": "standard.pdf", "attachmentTemplateId": "standard-pdf"}],
             ... )
         """
         body: Dict[str, Any] = {
             "templateId": template_id,
             "recipients": recipients,
-            "trackOpens": track_opens,
-            "trackClicks": track_clicks,
         }
 
-        if subject:
-            body["subject"] = subject
+        if version:
+            body["version"] = version
+        if base_variables:
+            body["baseVariables"] = base_variables
+        if attachments:
+            body["attachments"] = attachments
+        if sender_email:
+            body["senderEmail"] = sender_email
+        if sender_id:
+            body["senderId"] = sender_id
         if from_name:
             body["fromName"] = from_name
         if reply_to:
             body["replyTo"] = reply_to
-        if common_variables:
-            body["commonVariables"] = common_variables
+        if priority:
+            body["priority"] = priority
+        if headers:
+            body["headers"] = headers
+        if tags:
+            body["tags"] = tags
+        if metadata:
+            body["metadata"] = metadata
+        if batch_name:
+            body["batchName"] = batch_name
+        if dry_run is not None:
+            body["dryRun"] = dry_run
+        if scheduled_at:
+            body["scheduledAt"] = scheduled_at
 
-        response = self._http.post("/api/v1/emails/send-bulk", body)
+        response = self._http.post("/api/v1/emails/send/bulk", body)
         return response.get("data", response)
 
     def get(self, email_id: str) -> Dict[str, Any]:
@@ -254,87 +385,89 @@ class AsyncEmailsResource:
     async def send(
         self,
         template_id: str,
-        to: str,
+        to: RecipientInput,
         *,
-        to_name: Optional[str] = None,
-        subject: Optional[str] = None,
+        cc: Optional[RecipientInput] = None,
+        bcc: Optional[RecipientInput] = None,
+        version: Optional[str] = None,
+        sender_email: Optional[str] = None,
+        sender_id: Optional[str] = None,
         from_name: Optional[str] = None,
         reply_to: Optional[str] = None,
         variables: Optional[Dict[str, Any]] = None,
-        track_opens: bool = True,
-        track_clicks: bool = True,
+        priority: Optional[str] = None,
+        scheduled_at: Optional[str] = None,
+        headers: Optional[Dict[str, str]] = None,
+        tags: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
         attachments: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
-        """Send an email using a template (async)."""
+        """
+        Send an email using a template (async).
+
+        See EmailsResource.send() for full documentation.
+        """
         body: Dict[str, Any] = {
             "templateId": template_id,
-            "to": to,
-            "trackOpens": track_opens,
-            "trackClicks": track_clicks,
+            "to": _normalize_recipients(to),
         }
 
-        if to_name:
-            body["toName"] = to_name
-        if subject:
-            body["subject"] = subject
+        if cc is not None:
+            body["cc"] = _normalize_recipients(cc)
+        if bcc is not None:
+            body["bcc"] = _normalize_recipients(bcc)
+        if version:
+            body["version"] = version
+        if sender_email:
+            body["senderEmail"] = sender_email
+        if sender_id:
+            body["senderId"] = sender_id
         if from_name:
             body["fromName"] = from_name
         if reply_to:
             body["replyTo"] = reply_to
         if variables:
             body["variables"] = variables
+        if priority:
+            body["priority"] = priority
+        if scheduled_at:
+            body["scheduledAt"] = scheduled_at
+        if headers:
+            body["headers"] = headers
+        if tags:
+            body["tags"] = tags
+        if metadata:
+            body["metadata"] = metadata
         if attachments:
             body["attachments"] = attachments
 
         response = await self._http.post("/api/v1/emails/send", body)
         return response.get("data", response)
 
-    async def send_with_pdf(
+    async def send_with_attachment(
         self,
         template_id: str,
-        to: str,
-        pdf_template_id: str,
+        to: RecipientInput,
+        attachment_template_id: str,
+        attachment_type: str = "pdf",
         *,
-        pdf_file_name: Optional[str] = None,
-        pdf_variables: Optional[Dict[str, Any]] = None,
+        file_name: Optional[str] = None,
+        attachment_variables: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
-        """Send an email with a generated PDF attachment (async)."""
-        attachment: Dict[str, Any] = {
-            "type": "pdf",
-            "templateId": pdf_template_id,
-        }
-        if pdf_file_name:
-            attachment["fileName"] = pdf_file_name
-        if pdf_variables:
-            attachment["variables"] = pdf_variables
+        """
+        Send an email with a generated attachment (async).
 
-        return await self.send(
-            template_id=template_id,
-            to=to,
-            attachments=[attachment],
-            **kwargs,
-        )
-
-    async def send_with_excel(
-        self,
-        template_id: str,
-        to: str,
-        excel_template_id: str,
-        *,
-        excel_file_name: Optional[str] = None,
-        excel_variables: Optional[Dict[str, Any]] = None,
-        **kwargs: Any,
-    ) -> Dict[str, Any]:
-        """Send an email with a generated Excel attachment (async)."""
+        See EmailsResource.send_with_attachment() for full documentation.
+        """
         attachment: Dict[str, Any] = {
-            "type": "excel",
-            "templateId": excel_template_id,
+            "type": attachment_type,
+            "templateId": attachment_template_id,
         }
-        if excel_file_name:
-            attachment["fileName"] = excel_file_name
-        if excel_variables:
-            attachment["variables"] = excel_variables
+        if file_name:
+            attachment["fileName"] = file_name
+        if attachment_variables:
+            attachment["variables"] = attachment_variables
 
         return await self.send(
             template_id=template_id,
@@ -348,31 +481,61 @@ class AsyncEmailsResource:
         template_id: str,
         recipients: List[Dict[str, Any]],
         *,
-        subject: Optional[str] = None,
+        version: Optional[str] = None,
+        base_variables: Optional[Dict[str, Any]] = None,
+        attachments: Optional[List[Dict[str, Any]]] = None,
+        sender_email: Optional[str] = None,
+        sender_id: Optional[str] = None,
         from_name: Optional[str] = None,
         reply_to: Optional[str] = None,
-        common_variables: Optional[Dict[str, Any]] = None,
-        track_opens: bool = True,
-        track_clicks: bool = True,
+        priority: Optional[str] = None,
+        headers: Optional[Dict[str, str]] = None,
+        tags: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        batch_name: Optional[str] = None,
+        dry_run: Optional[bool] = None,
+        scheduled_at: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Send bulk emails (async)."""
+        """
+        Send bulk emails (async).
+
+        See EmailsResource.send_bulk() for full documentation.
+        """
         body: Dict[str, Any] = {
             "templateId": template_id,
             "recipients": recipients,
-            "trackOpens": track_opens,
-            "trackClicks": track_clicks,
         }
 
-        if subject:
-            body["subject"] = subject
+        if version:
+            body["version"] = version
+        if base_variables:
+            body["baseVariables"] = base_variables
+        if attachments:
+            body["attachments"] = attachments
+        if sender_email:
+            body["senderEmail"] = sender_email
+        if sender_id:
+            body["senderId"] = sender_id
         if from_name:
             body["fromName"] = from_name
         if reply_to:
             body["replyTo"] = reply_to
-        if common_variables:
-            body["commonVariables"] = common_variables
+        if priority:
+            body["priority"] = priority
+        if headers:
+            body["headers"] = headers
+        if tags:
+            body["tags"] = tags
+        if metadata:
+            body["metadata"] = metadata
+        if batch_name:
+            body["batchName"] = batch_name
+        if dry_run is not None:
+            body["dryRun"] = dry_run
+        if scheduled_at:
+            body["scheduledAt"] = scheduled_at
 
-        response = await self._http.post("/api/v1/emails/send-bulk", body)
+        response = await self._http.post("/api/v1/emails/send/bulk", body)
         return response.get("data", response)
 
     async def get(self, email_id: str) -> Dict[str, Any]:
