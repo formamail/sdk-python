@@ -50,7 +50,7 @@ dev = [
 
 [project.urls]
 Homepage = "https://formamail.com"
-Documentation = "https://docs.formamail.com/sdk/python"
+Documentation = "https://docs.formamail.com/developer-guide"
 Repository = "https://github.com/formamail/sdk-python"
 Issues = "https://github.com/formamail/sdk-python/issues"
 
@@ -58,8 +58,9 @@ Issues = "https://github.com/formamail/sdk-python/issues"
 packages = ["formamail"]
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.9"
 strict = true
+warn_return_any = false
 
 [tool.ruff]
 line-length = 100

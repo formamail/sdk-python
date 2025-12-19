@@ -360,7 +360,7 @@ mypy formamail --strict
 
 - GitHub Issues: Report bugs and feature requests
 - Email: sdk-support@formamail.com
-- Documentation: https://docs.formamail.com/sdk/python
+- Documentation: https://docs.formamail.com/developer-guide
 
 ## Security
 

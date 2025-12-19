@@ -380,6 +380,6 @@ MIT
 
 ## Support
 
-- Documentation: https://docs.formamail.com/sdk/python
-- API Reference: https://docs.formamail.com/api
+- Documentation: https://docs.formamail.com/developer-guide
+- API Reference: https://docs.formamail.com/api-reference
 - Support: support@formamail.com
