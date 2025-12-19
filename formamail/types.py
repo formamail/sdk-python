@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
 # Email Types
 class EmailRecipient(TypedDict, total=False):
     """Email recipient with optional name."""
+
     email: str
     name: Optional[str]
 
@@ -18,6 +19,7 @@ RecipientInput = Union[str, EmailRecipient, List[Union[str, EmailRecipient]]]
 
 class Attachment(TypedDict, total=False):
     """Email attachment configuration."""
+
     type: Literal["pdf", "excel"]
     template_id: str
     file_name: Optional[str]
@@ -26,6 +28,7 @@ class Attachment(TypedDict, total=False):
 
 class BulkAttachment(TypedDict, total=False):
     """Attachment configuration for bulk emails."""
+
     filename: str
     content_type: Optional[str]
     content: Optional[str]  # Base64 encoded
@@ -39,6 +42,7 @@ class BulkAttachment(TypedDict, total=False):
 
 class BulkRecipient(TypedDict, total=False):
     """Bulk email recipient with per-recipient variables."""
+
     email: str
     name: Optional[str]
     variables: Dict[str, Any]  # Required - variables for this recipient
@@ -47,6 +51,7 @@ class BulkRecipient(TypedDict, total=False):
 
 class SendEmailOptions(TypedDict, total=False):
     """Options for sending an email."""
+
     template_id: str
     to: RecipientInput
     cc: Optional[RecipientInput]
@@ -67,6 +72,7 @@ class SendEmailOptions(TypedDict, total=False):
 
 class SendBulkEmailOptions(TypedDict, total=False):
     """Options for sending bulk emails with personalization."""
+
     template_id: str
     version: Optional[Literal["published", "draft"]]
     recipients: List[BulkRecipient]
@@ -87,6 +93,7 @@ class SendBulkEmailOptions(TypedDict, total=False):
 
 class SendBulkEmailResponse(TypedDict, total=False):
     """Response from sending bulk emails."""
+
     batch_id: str
     status: str
     total_emails: int
@@ -112,6 +119,7 @@ EmailStatus = Literal[
 
 class BlockedRecipient(TypedDict, total=False):
     """Details about a blocked recipient."""
+
     email: str
     reason: str
     source: Optional[str]
@@ -119,6 +127,7 @@ class BlockedRecipient(TypedDict, total=False):
 
 class SendEmailResponse(TypedDict, total=False):
     """Response from sending an email."""
+
     id: str
     status: EmailStatus
     message: str
@@ -127,6 +136,7 @@ class SendEmailResponse(TypedDict, total=False):
     created_at: str
     warning: Optional[str]
     blocked_recipients: Optional[List[BlockedRecipient]]
+
 
 WebhookEventType = Literal[
     "email.sent",

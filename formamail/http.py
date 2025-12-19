@@ -43,9 +43,7 @@ class HttpClient:
 
         return data
 
-    def get(
-        self, path: str, params: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+    def get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Make GET request."""
         # Filter out None values from params
         if params:
@@ -58,9 +56,7 @@ class HttpClient:
         )
         return self._handle_response(response)
 
-    def post(
-        self, path: str, data: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+    def post(self, path: str, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Make POST request."""
         response = self._client.post(
             f"{self.base_url}{path}",
@@ -69,9 +65,7 @@ class HttpClient:
         )
         return self._handle_response(response)
 
-    def put(
-        self, path: str, data: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+    def put(self, path: str, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Make PUT request."""
         response = self._client.put(
             f"{self.base_url}{path}",
@@ -128,9 +122,7 @@ class AsyncHttpClient:
 
         return data
 
-    async def get(
-        self, path: str, params: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+    async def get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Make GET request."""
         if params:
             params = {k: v for k, v in params.items() if v is not None}
@@ -142,9 +134,7 @@ class AsyncHttpClient:
         )
         return self._handle_response(response)
 
-    async def post(
-        self, path: str, data: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+    async def post(self, path: str, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Make POST request."""
         response = await self._client.post(
             f"{self.base_url}{path}",
@@ -153,9 +143,7 @@ class AsyncHttpClient:
         )
         return self._handle_response(response)
 
-    async def put(
-        self, path: str, data: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+    async def put(self, path: str, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Make PUT request."""
         response = await self._client.put(
             f"{self.base_url}{path}",

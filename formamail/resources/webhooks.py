@@ -139,9 +139,7 @@ class AsyncWebhooksResource:
         if active is not None:
             body["active"] = active
 
-        response = await self._http.put(
-            f"/api/v1/webhook-subscriptions/{webhook_id}", body
-        )
+        response = await self._http.put(f"/api/v1/webhook-subscriptions/{webhook_id}", body)
         return response.get("data", response)
 
     async def delete(self, webhook_id: str) -> None:
